@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, minimum-scale=1"/>
+  <title>MediaHub Music Player</title>
+  <!-- Vincular el manifest -->
+  <link rel="manifest" href="manifest.json"/>
+  <style>
+    /* --- RESET --- */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      background-image: var(--app-bg-image, none);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      color: #fff;
+      min-height: 100vh;
+      position: relative;
+      padding-bottom: 130px;
+    }
+    
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(18, 18, 18, var(--app-bg-opacity, 0.8));
+      z-index: -1;
+      pointer-events: none;
+    }
+    
+    /* --- NUEVOS BOTONES DE PERSONALIZACIÓN --- */
+    .customization-buttons {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    
+    .custom-btn {
+      width: 35px;
+      height: 35px;
+      border: none;
+      border-radius: 6px;
+      background-color: rgba(255, 255, 255, 0.1);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+    
+    .custom-btn:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+      transform: scale(1.05);
+    }
+    
+    .custom-btn img {
+      width: 20px;
+      height: 20px;
+      filter: invert(100%);
+    }
+    
+    /* Modal para selección de tema */
+    .theme-modal, .image-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.8);
+      z-index: 10001;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .modal-content {
+      background-color: #1f1f1f;
+      border-radius: 10px;
+      padding: 25px;
+      max-width: 350px;
+      width: 90%;
+      text-align: center;
+    }
+    
+    .modal-content h3 {
+      margin-bottom: 20px;
+      font-size: 1.2em;
+      color: #fff;
+    }
+    
+    .theme-options {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .theme-option {
+      padding: 12px;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .theme-option:hover {
+      border-color: #fff;
+    }
+    
+    .theme-color {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      margin-bottom: 5px;
+    }
+    
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 15px;
+    }
+    
+    .close-modal {
+      background-color: #ff0000;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      min-width: 80px;
+    }
+    
+    .close-modal:hover {
+      background-color: #cc0000;
+      transform: translateY(-1px);
+    }
+    
+    .close-modal.secondary {
+      background-color: #333;
+    }
+    
+    .close-modal.secondary:hover {
+      background-color: #444;
+    }
+    
+    .close-modal.success {
+      background-color: #28a745;
+    }
+    
+    .close-modal.success:hover {
+      background-color: #218838;
+    }
+    
+    /* Input file personalizado */
+    .file-input-container {
+      margin-bottom: 20px;
+    }
+    
+    .file-input-label {
+      display: inline-block;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #ff0000, #cc0000);
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95em;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      border: none;
+      box-shadow: 0 2px 8px rgba(255, 0, 0, 0.3);
+    }
+    
+    .file-input-label:hover {
+      background: linear-gradient(135deg, #cc0000, #aa0000);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 0, 0, 0.4);
+    }
+    
+    #background-image-input {
+      display: none;
+    }
+    
+    .image-preview {
+      margin-top: 15px;
+      max-width: 100%;
+      max-height: 120px;
+      border-radius: 8px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      border: 2px solid #333;
+    }
+    
+    .opacity-container {
+      margin: 20px 0;
+      padding: 15px;
+      background-color: #2a2a2a;
+      border-radius: 8px;
+      display: none;
+    }
+    
+    .opacity-container label {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 0.95em;
+      font-weight: 500;
+      color: #fff;
+    }
+    
+    .opacity-slider {
+      width: 100%;
+      margin-bottom: 8px;
+      height: 6px;
+      border-radius: 3px;
+      background: #444;
+      outline: none;
+      cursor: pointer;
+    }
+    
+    .opacity-slider::-webkit-slider-thumb {
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ff0000;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+    
+    .opacity-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ff0000;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+    
+    .opacity-value {
+      font-size: 0.85em;
+      color: #ccc;
+      text-align: center;
+      font-weight: 500;
+    }
+    
+    /* --- TOAST (mensaje flotante) --- */
+    .toast-container {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+    .toast {
+      background-color: rgba(0,0,0,0.8);
+      padding: 10px 15px;
+      border-radius: 6px;
+      font-size: 0.85em;
+      opacity: 1;
+      animation: fadeOut 3s forwards;
+    }
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    /* --- SECCIONES --- */
+    .section { display: none; padding: 15px; }
+    .section.active { display: block; }
+    /* --- BARRA DE NAVEGACIÓN INFERIOR --- */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 60px;
+      background-color: #181818;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      border-top: 1px solid #333;
+      z-index: 9999;
+    }
+    .nav-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 0.75em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      padding: 5px;
+    }
+    .nav-btn img {
+      width: 24px; height: 24px;
+      margin-bottom: 2px;
+      filter: invert(100%);
+    }
+    .nav-btn.active { color: var(--primary-color, #ff0000); }
+    /* --- BARRAS DE BÚSQUEDA --- */
+    .search-bar {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .search-bar input {
+      flex: 1;
+      padding: 8px;
+      border-radius: 4px;
+      border: none;
+      font-size: 0.9em;
+      margin-right: 8px;
+    }
+    .search-bar button {
+      background-color: var(--primary-color, #ff0000);
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      color: #fff;
+    }
+    /* --- PRINCIPAL --- */
+    #principal h2 { margin-bottom: 10px; font-size: 1.1em; }
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .grid-card {
+      background-color: #1f1f1f;
+      border-radius: 6px;
+      overflow: hidden;
+      text-align: left;
+      padding-bottom: 8px;
+      position: relative;
+    }
+    .grid-card img { width: 100%; height: 80px; object-fit: cover; }
+    .grid-info { padding: 6px; }
+    .grid-info h3 { font-size: 0.8em; margin-bottom: 4px; max-height: 2.2em; overflow: hidden; }
+    .grid-info p { font-size: 0.65em; color: #aaa; margin-bottom: 6px; }
+    .grid-info .buttons-container { display: flex; gap: 6px; }
+    .grid-info button {
+      background-color: var(--primary-color, #ff0000);
+      border: none;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.7em;
+      color: #fff;
+      flex-shrink: 0;
+      position: relative;
+    }
+    /* --- BUSCAR --- */
+    #buscar h2 { margin-bottom: 10px; font-size: 1.1em; }
+    .search-list { display: flex; flex-direction: column; gap: 10px; }
+    .search-item {
+      background-color: #1f1f1f;
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      padding: 8px;
+      gap: 10px;
+      position: relative;
+    }
+    .search-item img { width: 60px; height: 60px; object-fit: cover; border-radius: 4px; }
+    .search-info { flex: 1; }
+    .search-info h3 { font-size: 0.85em; margin-bottom: 4px; max-height: 2.2em; overflow: hidden; }
+    .search-info p { font-size: 0.65em; color: #aaa; margin-bottom: 6px; }
+    .search-info .buttons-container { display: flex; gap: 6px; }
+    .search-info button {
+      background-color: var(--primary-color, #ff0000);
+      border: none;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.7em;
+      color: #fff;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .search-info .download-progress {
+      margin-top: 6px;
+      display: none;
+    }
+    /* --- Elementos comunes para descarga --- */
+    .download-progress {
+      width: 90%;
+      margin: 8px auto 0;
+      display: none;
+    }
+    .download-progress progress {
+      width: 100%;
+      height: 8px;
+    }
+    .spinner {
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid #fff;
+      border-radius: 50%;
+      width: 12px;
+      height: 12px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .cancel-download-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 0.9em;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cancel-download-btn:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    @keyframes spin { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+    .three-dots {
+      font-size: 1.3em;
+      color: #aaa;
+      cursor: pointer;
+      z-index: 9999;
+    }
+    .menu-options {
+      display: none;
+      position: absolute;
+      top: 50px; right: 10px;
+      background-color: #333;
+      border-radius: 4px;
+      overflow: hidden;
+      z-index: 99999;
+    }
+    .menu-options div {
+      padding: 8px 12px;
+      font-size: 0.85em;
+      border-bottom: 1px solid #444;
+      cursor: pointer;
+    }
+    .menu-options div:last-child { border-bottom: none; }
+    .menu-options div:hover { background-color: #444; }
+    /* --- BIBLIOTECA --- */
+    #biblioteca h2 { margin-bottom: 10px; font-size: 1.1em; }
+    .offline-list h3 { margin-bottom: 10px; font-size: 1em; }
+    .offline-container { display: flex; flex-direction: column; gap: 10px; }
+    .offline-item {
+      background-color: #1f1f1f;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      cursor: pointer;
+    }
+    .offline-left { display: flex; align-items: center; gap: 8px; }
+    .offline-left img { width: 50px; height: 50px; object-fit: cover; border-radius: 4px; }
+    .offline-info { flex: 1; }
+    .offline-info span { font-size: 0.85em; }
+    .offline-info p { font-size: 0.65em; color: #aaa; }
+    /* --- REPRODUCTOR --- */
+    .player-container {
+      position: fixed;
+      bottom: 60px;
+      left: 0;
+      right: 0;
+      background-color: #181818;
+      border-top: 1px solid #333;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      z-index: 2000;
+      display: none;
+    }
+    
+    .player-thumb-container {
+      position: relative;
+      width: 50px;
+      height: 50px;
+      margin-right: 10px;
+    }
+    .player-thumb { width: 100%; height: 100%; border-radius: 4px; object-fit: cover; }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid #fff;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #player-thumb-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .player-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+    }
+    .player-title { font-size: 0.9em; margin-bottom: 5px; font-weight: bold; max-height: 2.4em; overflow: hidden; }
+    .player-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+      flex-wrap: wrap;
+    }
+    .control-btn {
+      background-color: transparent;
+      border: none;
+      cursor: pointer;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      fill: var(--primary-color, #ff0000);
+      padding: 0;
+    }
+    .control-btn.active {
+      background-color: rgba(255, 0, 0, 0.2);
+      border-radius: 4px;
+    }
+    .control-btn svg { width: 20px; height: 20px; }
+    .player-progress input[type="range"] { width: 100%; }
+    .player-time { font-size: 0.7em; color: #aaa; }
+  </style>
+</head>
+<body>
+  <!-- Contenedor de Toasts -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Botones de personalización -->
+  <div class="customization-buttons">
+    <button class="custom-btn" id="theme-btn" title="Cambiar tema de color">
+      <img src="https://cdn-icons-png.flaticon.com/512/3524/3524659.png" alt="Tema">
+    </button>
+    <button class="custom-btn" id="image-btn" title="Cambiar imagen de fondo">
+      <img src="https://cdn-icons-png.flaticon.com/512/74/74176.png" alt="Imagen">
+    </button>
+  </div>
+
+  <!-- Modal para selección de tema -->
+  <div class="theme-modal" id="theme-modal">
+    <div class="modal-content">
+      <h3>Selecciona un tema</h3>
+              <div class="theme-options">
+        <div class="theme-option" data-color="#ff0000">
+          <div class="theme-color" style="background-color: #ff0000;"></div>
+          <span>Rojo Original</span>
+        </div>
+        <div class="theme-option" data-color="#00ff00">
+          <div class="theme-color" style="background-color: #00ff00;"></div>
+          <span>Verde</span>
+        </div>
+        <div class="theme-option" data-color="#1E90FF">
+          <div class="theme-color" style="background-color: #1E90FF;"></div>
+          <span>Azul</span>
+        </div>
+        <div class="theme-option" data-color="#ff8000">
+          <div class="theme-color" style="background-color: #ff8000;"></div>
+          <span>Naranja</span>
+        </div>
+        <div class="theme-option" data-color="#8000ff">
+          <div class="theme-color" style="background-color: #8000ff;"></div>
+          <span>Púrpura</span>
+        </div>
+        <div class="theme-option" data-color="#ff0080">
+          <div class="theme-color" style="background-color: #ff0080;"></div>
+          <span>Rosa</span>
+        </div>
+      </div>
+      <div class="modal-buttons">
+        <button class="close-modal" id="close-theme-modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para selección de imagen -->
+  <div class="image-modal" id="image-modal">
+    <div class="modal-content">
+      <h3>Imagen de fondo del reproductor</h3>
+      <div class="file-input-container">
+        <label for="background-image-input" class="file-input-label">
+          Seleccionar imagen
+        </label>
+        <input type="file" id="background-image-input" accept="image/*">
+        <img id="image-preview" class="image-preview" alt="Vista previa">
+      </div>
+      <div class="opacity-container" id="opacity-container">
+        <label for="opacity-slider">Opacidad del fondo:</label>
+        <input type="range" id="opacity-slider" class="opacity-slider" min="0" max="1" step="0.1" value="0.8">
+        <div class="opacity-value" id="opacity-value">80%</div>
+      </div>
+      <div class="modal-buttons">
+        <button class="close-modal success" id="apply-image" style="display: none;">✓ Aplicar</button>
+        <button class="close-modal secondary" id="remove-image">✗ Quitar</button>
+        <button class="close-modal" id="close-image-modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECCIÓN PRINCIPAL -->
+  <div id="principal" class="section active">
+    <h2>MediaHub Music Player</h2>
+    <div class="search-bar">
+      <input type="text" id="principal-search-input" placeholder="Buscar canción...">
+      <button id="principal-search-button">Buscar</button>
+    </div>
+    <div class="grid-container" id="principal-grid"></div>
+  </div>
+
+  <!-- SECCIÓN BUSCAR -->
+  <div id="buscar" class="section">
+    <h2>MediaHub Music Search</h2>
+    <div class="search-bar">
+      <input type="text" id="buscar-search-input" placeholder="Buscar canción...">
+      <button id="buscar-search-button">Buscar</button>
+    </div>
+    <div class="search-list" id="buscar-list"></div>
+  </div>
+
+  <!-- SECCIÓN BIBLIOTECA -->
+  <div id="biblioteca" class="section">
+    <h2>MediaHub Music Offline</h2>
+    <div class="search-bar">
+      <input type="text" id="offline-search-input" placeholder="Buscar canciones descargadas...">
+    </div>
+    <div class="offline-list">
+      <h3>Mis canciones descargadas</h3>
+      <div class="offline-container" id="offline-container"></div>
+    </div>
+  </div>
+
+  <!-- REPRODUCTOR FIJO -->
+  <div class="player-container" id="player-container">
+    <div class="player-thumb-container">
+      <img id="player-thumb" class="player-thumb" src="" alt="Thumb">
+      <div id="player-thumb-spinner" class="spinner" style="display: none;"></div>
+    </div>
+    <div class="player-info">
+      <div class="player-title" id="player-title">Ninguna canción</div>
+      <div class="player-controls">
+        <button class="control-btn" id="shuffle-btn" title="Reproducción aleatoria">
+          <svg viewBox="0 0 24 24">
+            <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+          </svg>
+        </button>
+        <button class="control-btn" id="prev-btn" title="Anterior">
+          <svg viewBox="0 0 24 24">
+            <path d="M18 6l-8.5 6 8.5 6V6zM6 6h2v12H6z"/>
+          </svg>
+        </button>
+        <button class="control-btn" id="play-pause-btn" title="Reproducir/Pausar">
+          <svg id="play-icon" viewBox="0 0 24 24" style="display:none;">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <svg id="pause-icon" viewBox="0 0 24 24" style="display:none;">
+            <path d="M6 19h4V5H6M14 5v14h4V5h-4z"/>
+          </svg>
+        </button>
+        <button class="control-btn" id="next-btn" title="Siguiente">
+          <svg viewBox="0 0 24 24">
+            <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
+          </svg>
+        </button>
+        <button class="control-btn" id="repeat-btn" title="Repetir canción">
+          <svg viewBox="0 0 24 24">
+            <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="player-progress">
+        <input type="range" id="progress-bar" value="0" min="0" max="100"/>
+      </div>
+      <div class="player-time">
+        <span id="current-time">0:00</span> / <span id="duration">0:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BARRA DE NAVEGACIÓN INFERIOR -->
+  <div class="bottom-nav">
+    <button class="nav-btn active" data-target="principal">
+      <img src="https://cdn-icons-png.flaticon.com/512/1946/1946433.png" alt="Principal">
+      <span>Principal</span>
+    </button>
+    <button class="nav-btn" data-target="buscar">
+      <img src="https://cdn-icons-png.flaticon.com/512/751/751381.png" alt="Buscar">
+      <span>Buscar</span>
+    </button>
+    <button class="nav-btn" data-target="biblioteca">
+      <img src="https://cdn-icons-png.flaticon.com/512/6464/6464493.png" alt="Biblioteca">
+      <span>Offline</span>
+    </button>
+  </div>
+
+  <script>
+    // === SISTEMA DE ALMACENAMIENTO CON INDEXEDDB ===
+    class UserPreferences {
+      constructor() {
+        this.dbName = 'MediaHubPreferences';
+        this.dbVersion = 1;
+        this.db = null;
+        this.init();
+      }
+
+      async init() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, this.dbVersion);
+          
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            this.db = request.result;
+            this.loadPreferences();
+            resolve();
+          };
+          
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('preferences')) {
+              const store = db.createObjectStore('preferences', { keyPath: 'id' });
+              store.createIndex('type', 'type', { unique: false });
+            }
+          };
+        });
+      }
+
+      async savePreference(id, type, value) {
+        if (!this.db) return;
+        
+        const transaction = this.db.transaction(['preferences'], 'readwrite');
+        const store = transaction.objectStore('preferences');
+        
+        const data = {
+          id: id,
+          type: type,
+          value: value,
+          timestamp: Date.now()
+        };
+        
+        store.put(data);
+      }
+
+      async getPreference(id) {
+        if (!this.db) return null;
+        
+        return new Promise((resolve, reject) => {
+          const transaction = this.db.transaction(['preferences'], 'readonly');
+          const store = transaction.objectStore('preferences');
+          const request = store.get(id);
+          
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      async loadPreferences() {
+        try {
+          // Cargar tema
+          const themeData = await this.getPreference('theme');
+          if (themeData) {
+            document.documentElement.style.setProperty('--primary-color', themeData.value);
+            const controlBtns = document.querySelectorAll('.control-btn');
+            controlBtns.forEach(btn => {
+              btn.style.fill = themeData.value;
+            });
+          }
+
+          // Cargar imagen de fondo
+          const imageData = await this.getPreference('background');
+          if (imageData) {
+            document.documentElement.style.setProperty('--app-bg-image', `url(${imageData.value})`);
+          }
+
+          // Cargar opacidad
+          const opacityData = await this.getPreference('opacity');
+          if (opacityData) {
+            document.documentElement.style.setProperty('--app-bg-opacity', opacityData.value);
+            const opacitySlider = document.getElementById('opacity-slider');
+            const opacityValue = document.getElementById('opacity-value');
+            if (opacitySlider && opacityValue) {
+              opacitySlider.value = opacityData.value;
+              opacityValue.textContent = Math.round(opacityData.value * 100) + '%';
+            }
+          }
+        } catch (error) {
+          console.log('Error loading preferences:', error);
+        }
+      }
+
+      async clearPreferences() {
+        if (!this.db) return;
+        
+        const transaction = this.db.transaction(['preferences'], 'readwrite');
+        const store = transaction.objectStore('preferences');
+        store.clear();
+      }
+    }
+
+    // Inicializar sistema de preferencias
+    const userPrefs = new UserPreferences();
+
+    // === FUNCIONALIDAD ORIGINAL ===
+    // Funcionalidad para cambio de temas
+    const themeBtn = document.getElementById('theme-btn');
+    const imageBtn = document.getElementById('image-btn');
+    const themeModal = document.getElementById('theme-modal');
+    const imageModal = document.getElementById('image-modal');
+    const closeThemeModal = document.getElementById('close-theme-modal');
+    const closeImageModal = document.getElementById('close-image-modal');
+    const themeOptions = document.querySelectorAll('.theme-option');
+    const backgroundImageInput = document.getElementById('background-image-input');
+    const imagePreview = document.getElementById('image-preview');
+    const removeImageBtn = document.getElementById('remove-image');
+    const applyImageBtn = document.getElementById('apply-image');
+    const opacityContainer = document.getElementById('opacity-container');
+    const opacitySlider = document.getElementById('opacity-slider');
+    const opacityValue = document.getElementById('opacity-value');
+    let currentImageUrl = null;
+
+    // Mostrar modal de tema
+    themeBtn.addEventListener('click', () => {
+      themeModal.style.display = 'flex';
+    });
+
+    // Mostrar modal de imagen
+    imageBtn.addEventListener('click', () => {
+      imageModal.style.display = 'flex';
+    });
+
+    // Cerrar modales
+    closeThemeModal.addEventListener('click', () => {
+      themeModal.style.display = 'none';
+    });
+
+    closeImageModal.addEventListener('click', () => {
+      imageModal.style.display = 'none';
+    });
+
+    // Cerrar modal al hacer clic fuera
+    themeModal.addEventListener('click', (e) => {
+      if (e.target === themeModal) {
+        themeModal.style.display = 'none';
+      }
+    });
+
+    imageModal.addEventListener('click', (e) => {
+      if (e.target === imageModal) {
+        imageModal.style.display = 'none';
+      }
+    });
+
+    // Cambiar tema de color
+    themeOptions.forEach(option => {
+      option.addEventListener('click', async () => {
+        const color = option.getAttribute('data-color');
+        document.documentElement.style.setProperty('--primary-color', color);
+        
+        // Actualizar color de los botones de control
+        const controlBtns = document.querySelectorAll('.control-btn');
+        controlBtns.forEach(btn => {
+          btn.style.fill = color;
+        });
+
+        // Guardar en IndexedDB
+        await userPrefs.savePreference('theme', 'color', color);
+
+        // Mostrar toast
+        showToast(`✓ Tema ${option.querySelector('span').textContent} guardado`);
+        themeModal.style.display = 'none';
+      });
+    });
+
+    // Manejar selección de imagen
+    backgroundImageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imageUrl = e.target.result;
+          currentImageUrl = imageUrl;
+          imagePreview.src = imageUrl;
+          imagePreview.style.display = 'block';
+          opacityContainer.style.display = 'block';
+          applyImageBtn.style.display = 'inline-block';
+          
+          showToast('📷 Imagen cargada - Presiona "Aplicar"');
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Aplicar imagen al reproductor
+    applyImageBtn.addEventListener('click', async () => {
+      if (currentImageUrl) {
+        document.documentElement.style.setProperty('--app-bg-image', `url(${currentImageUrl})`);
+        
+        // Guardar en IndexedDB
+        await userPrefs.savePreference('background', 'image', currentImageUrl);
+        
+        showToast('✓ Imagen aplicada y guardada');
+        imageModal.style.display = 'none';
+      }
+    });
+
+    // Manejar cambio de opacidad
+    opacitySlider.addEventListener('input', async (e) => {
+      const opacity = e.target.value;
+      document.documentElement.style.setProperty('--app-bg-opacity', opacity);
+      opacityValue.textContent = Math.round(opacity * 100) + '%';
+      
+      // Guardar en IndexedDB
+      await userPrefs.savePreference('opacity', 'number', opacity);
+    });
+
+    // Quitar imagen
+    removeImageBtn.addEventListener('click', async () => {
+      document.documentElement.style.setProperty('--app-bg-image', 'none');
+      document.documentElement.style.setProperty('--app-bg-opacity', '0.8');
+      imagePreview.style.display = 'none';
+      opacityContainer.style.display = 'none';
+      applyImageBtn.style.display = 'none';
+      backgroundImageInput.value = '';
+      opacitySlider.value = '0.8';
+      opacityValue.textContent = '80%';
+      currentImageUrl = null;
+      
+      // Limpiar de IndexedDB
+      await userPrefs.savePreference('background', 'image', null);
+      await userPrefs.savePreference('opacity', 'number', '0.8');
+      
+      showToast('✗ Imagen removida y configuración guardada');
+      imageModal.style.display = 'none';
+    });
+
+    // Función para mostrar toast
+    function showToast(message) {
+      const toastContainer = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      toastContainer.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+  </script>
+
+  <!-- Vincular el archivo JavaScript externo -->
+  <script src="app.js"></script>
+</body>
+  </html>
