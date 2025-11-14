@@ -53,6 +53,20 @@ async function fetchWithRetryDownload(url, abortController) {
   }
 }
 
+// Función para fetch de recomendaciones (solo para sección principal)
+async function fetchRecommendations(videoId) {
+  try {
+    const url = `https://apis-mediahub.vercel.app/api/ytnext?url=https://music.youtube.com/watch?v=${videoId}`;
+    const res = await fetchWithRetry(url);
+    const data = await res.json();
+    if (data.status !== 200) throw new Error("Error en API de recomendaciones");
+    return data.results.filter(item => !item.explicit);
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
 // Función para descargar en blob con progreso
 async function downloadAsBlob(url, onProgress, abortController) {
   try {
@@ -106,6 +120,7 @@ let currentIndex = -1;
 let isPlaying = false;
 let repeatMode = false;
 let shuffleMode = false;
+let queueSource = '';
 let preloadAbortControllers = new Map(); // Para cancelar preloads si es necesario
 let preloadedBlobs = new Set(); // Para rastrear blobs preloaded y revocarlos más tarde
 
@@ -170,6 +185,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const savedIndex = localStorage.getItem("currentIndex");
   repeatMode = localStorage.getItem("repeatMode") === "true";
   shuffleMode = localStorage.getItem("shuffleMode") === "true" ? true : false;
+  queueSource = localStorage.getItem("queueSource") || '';
   updateControlButtons();
   if (savedQueue) {
     playQueue = JSON.parse(savedQueue);
@@ -188,6 +204,7 @@ window.addEventListener("beforeunload", () => {
   localStorage.setItem("currentIndex", currentIndex.toString());
   localStorage.setItem("repeatMode", repeatMode.toString());
   localStorage.setItem("shuffleMode", shuffleMode.toString());
+  localStorage.setItem("queueSource", queueSource);
   // Revocar blobs preloaded para liberar memoria
   cleanUpPreloadedBlobs();
 });
@@ -249,8 +266,9 @@ function displayPrincipalResults(results) {
       <div class="download-progress">
         <progress value="0" max="100"></progress>
       </div>
-      <div class="three-dots" style="display: none;">⋮</div>
+      <div class="three-dots">⋮</div>
       <div class="menu-options">
+        <div class="play-next">Reproducir a continuación</div>
         <div class="save-to-phone">Guardar en Teléfono</div>
         <div class="delete-offline">Borrar</div>
       </div>
@@ -258,7 +276,7 @@ function displayPrincipalResults(results) {
     const playBtn = card.querySelector(".play-btn");
     playBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      buildQueueAndPlay(results, index, true);
+      buildQueueAndPlay(results, index, true, true);
     });
     const downloadBtn = card.querySelector(".download-btn");
     let abortController = null;
@@ -341,6 +359,16 @@ function displayPrincipalResults(results) {
       ev.stopPropagation();
       menuOptions.style.display = (menuOptions.style.display === "block") ? "none" : "block";
     });
+    const playNextOption = card.querySelector(".play-next");
+    playNextOption.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      menuOptions.style.display = "none";
+      if (playQueue.length === 0) {
+        showToast("No hay cola activa");
+        return;
+      }
+      await addRecommendationsNext(item.videoId);
+    });
     const saveToPhone = card.querySelector(".save-to-phone");
     const deleteOffline = card.querySelector(".delete-offline");
     saveToPhone.addEventListener("click", (ev) => {
@@ -355,9 +383,63 @@ function displayPrincipalResults(results) {
       deleteSongOffline(videoId);
       menuOptions.style.display = "none";
     });
-    checkIfDownloaded(item.videoId, downloadBtn, threeDots);
+    checkIfDownloaded(item.videoId, downloadBtn, threeDots, menuOptions, saveToPhone, deleteOffline);
     principalGrid.appendChild(card);
   });
+}
+
+// Función para añadir recomendaciones a continuación en la cola
+async function addRecommendationsNext(videoId) {
+  try {
+    const recs = await fetchRecommendations(videoId);
+    if (recs.length === 0) {
+      showToast("No hay recomendaciones");
+      return;
+    }
+    const newSongs = [];
+    for (const rec of recs) {
+      const song = await new Promise(resolve => {
+        const tx = db.transaction(["songs"], "readonly");
+        const store = tx.objectStore("songs");
+        const req = store.get(rec.videoId);
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => resolve(null);
+      });
+      newSongs.push({
+        videoId: rec.videoId,
+        title: rec.title,
+        thumbnail: song ? (song.coverBlob ? URL.createObjectURL(song.coverBlob) : song.thumbnail) : rec.thumbnail,
+        audioUrl: song ? URL.createObjectURL(song.blob) : null,
+        duration: rec.duration || song?.duration || "",
+        useStreamApi: !song
+      });
+    }
+    const insertIndex = currentIndex + 1;
+    playQueue.splice(insertIndex, 0, ...newSongs);
+    preloadNearbyTracks();
+    showToast(`${newSongs.length} canciones añadidas a la cola`);
+  } catch (err) {
+    console.error(err);
+    showToast("Error añadiendo recomendaciones");
+  }
+}
+
+// Versión modificada de checkIfDownloaded para principal (maneja menú dinámico)
+function checkIfDownloaded(videoId, downloadBtn, threeDots, menuOptions, saveToPhone, deleteOffline) {
+  const tx = db.transaction(["songs"], "readonly");
+  const store = tx.objectStore("songs");
+  const req = store.get(videoId);
+  req.onsuccess = (e) => {
+    if (e.target.result) {
+      downloadBtn.style.display = "none";
+      // Mantener todas las opciones en menú para descargadas
+    } else {
+      downloadBtn.style.display = "inline-block";
+      // Remover opciones de offline si no está descargada
+      if (saveToPhone) saveToPhone.remove();
+      if (deleteOffline) deleteOffline.remove();
+    }
+  };
 }
 
 /* --- BUSCAR: Reproducción y descarga offline --- */
@@ -419,7 +501,7 @@ function displayBuscarResults(results) {
     const playBtn = div.querySelector(".play-btn");
     playBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      buildQueueAndPlay(results, index, true);
+      buildQueueAndPlay(results, index, true, false);
     });
     const downloadBtn = div.querySelector(".download-btn");
     let abortController = null;
@@ -569,13 +651,23 @@ async function saveToPhoneOffline(videoId) {
 }
 
 /* --- Creación de cola y reproducción --- */
-async function buildQueueAndPlay(list, startIndex, clearQueue = false) {
+async function buildQueueAndPlay(list, startIndex, clearQueue = false, isPrincipal = false) {
   if (clearQueue) {
     cleanUpPreloadedBlobs(); // Limpiar blobs anteriores
     playQueue = [];
     originalQueue = [];
   }
-  for (const item of list) {
+  let queueList = list;
+  let queueStartIndex = startIndex;
+  if (isPrincipal) {
+    const selectedVideoId = list[startIndex].videoId;
+    queueList = await fetchRecommendations(selectedVideoId);
+    queueStartIndex = 0;
+    queueSource = 'principal';
+  } else {
+    queueSource = '';
+  }
+  for (const item of queueList) {
     const song = await new Promise(resolve => {
       const tx = db.transaction(["songs"], "readonly");
       const store = tx.objectStore("songs");
@@ -596,7 +688,7 @@ async function buildQueueAndPlay(list, startIndex, clearQueue = false) {
   if (shuffleMode) {
     shuffleQueue();
   }
-  currentIndex = startIndex;
+  currentIndex = queueStartIndex;
   loadAndPlayCurrent();
 }
 
@@ -716,6 +808,66 @@ function updateMediaSession(track) {
   }
 }
 
+// Función para manejar fin de cola en principal (paginado de recomendaciones)
+async function handleQueueEnd() {
+  try {
+    const lastId = playQueue[playQueue.length - 1].videoId;
+    const nextRecs = await fetchRecommendations(lastId);
+    if (nextRecs.length === 0) {
+      showToast("Fin de las recomendaciones");
+      playerContainer.style.display = "none";
+      return;
+    }
+    const oldLength = playQueue.length;
+    for (const rec of nextRecs) {
+      const song = await new Promise(resolve => {
+        const tx = db.transaction(["songs"], "readonly");
+        const store = tx.objectStore("songs");
+        const req = store.get(rec.videoId);
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => resolve(null);
+      });
+      playQueue.push({
+        videoId: rec.videoId,
+        title: rec.title,
+        thumbnail: song ? (song.coverBlob ? URL.createObjectURL(song.coverBlob) : song.thumbnail) : rec.thumbnail,
+        audioUrl: song ? URL.createObjectURL(song.blob) : null,
+        duration: rec.duration || song?.duration || "",
+        useStreamApi: !song
+      });
+    }
+    originalQueue = [...playQueue];
+    currentIndex = oldLength;
+    loadAndPlayCurrent();
+  } catch (err) {
+    console.error("Error fetching next recommendations:", err);
+    showToast("Error cargando más recomendaciones");
+    playerContainer.style.display = "none";
+  }
+}
+
+async function onAudioEnded() {
+  progressBar.value = 0;
+  currentTimeEl.textContent = "0:00";
+  isPlaying = false;
+  updatePlayPauseIcon();
+  if (repeatMode) {
+    audio.currentTime = 0;
+    audio.play();
+    isPlaying = true;
+    updatePlayPauseIcon();
+  } else if (currentIndex < playQueue.length - 1) {
+    currentIndex++;
+    loadAndPlayCurrent();
+  } else {
+    if (queueSource === 'principal') {
+      await handleQueueEnd();
+    } else {
+      showToast("Fin de la cola de reproducción");
+      playerContainer.style.display = "none";
+    }
+  }
+}
 audio.addEventListener("timeupdate", () => {
   if (audio.duration) {
     const percent = (audio.currentTime / audio.duration) * 100;
@@ -738,24 +890,7 @@ progressBar.addEventListener("input", () => {
     audio.currentTime = seekTime;
   }
 });
-audio.addEventListener("ended", () => {
-  progressBar.value = 0;
-  currentTimeEl.textContent = "0:00";
-  isPlaying = false;
-  updatePlayPauseIcon();
-  if (repeatMode) {
-    audio.currentTime = 0;
-    audio.play();
-    isPlaying = true;
-    updatePlayPauseIcon();
-  } else if (currentIndex < playQueue.length - 1) {
-    currentIndex++;
-    loadAndPlayCurrent();
-  } else {
-    showToast("Fin de la cola de reproducción");
-    playerContainer.style.display = "none";
-  }
-});
+audio.addEventListener("ended", onAudioEnded);
 audio.addEventListener("error", (err) => {
   console.error("Error en audio:", err);
   showToast("Error en la reproducción, pasando a la siguiente...");
@@ -1007,6 +1142,7 @@ function playOffline(videoId) {
     if (shuffleMode) {
       shuffleQueue();
     }
+    queueSource = 'offline';
     loadAndPlayCurrent();
   };
 }
@@ -1057,4 +1193,4 @@ function showToast(message) {
   toast.textContent = message;
   toastContainer.appendChild(toast);
   setTimeout(() => { toast.remove(); }, 3500);
-  }
+    }
